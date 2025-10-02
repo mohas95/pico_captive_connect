@@ -1,0 +1,62 @@
+# Generated Cmake Pico project file
+
+cmake_minimum_required(VERSION 3.13)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Initialise pico_sdk from installed location
+# (note this can come from environment, CMake cache etc)
+
+set(PICO_SDK_FETCH_FROM_GIT ON)
+set(PICOTOOL_FETCH_FROM_GIT_PATH "${CMAKE_SOURCE_DIR}/.pico-deps" CACHE PATH "Shared picotool path")
+
+# ====================================================================================
+set(PICO_BOARD pico2_w CACHE STRING "Board type")
+
+# Pull in Raspberry Pi Pico SDK (must be before project)
+include(pico_sdk_import.cmake)
+
+project(pico_web C CXX ASM)
+
+# Initialise the Raspberry Pi Pico SDK
+pico_sdk_init()
+
+
+## Rest of the project
+
+# header files
+# include_directories(include) #out dated style
+
+# Add executable. Default name is the project name, version 0.1
+add_executable( ${PROJECT_NAME} 
+        src/main.cpp
+        src/creds_store.cpp
+        src/http_portal.cpp
+        src/sta_portal.cpp
+        src/dns_hijack.cpp
+        src/dhcpserver.c
+)
+
+pico_set_program_name(${PROJECT_NAME} "pico_web")
+pico_set_program_version(${PROJECT_NAME} "0.1")
+
+# Modify the below lines to enable/disable output over UART/USB
+pico_enable_stdio_uart(${PROJECT_NAME} 0)
+pico_enable_stdio_usb(${PROJECT_NAME} 1)
+
+# Add the standard library to the build
+target_link_libraries(${PROJECT_NAME}
+        pico_stdlib
+        pico_cyw43_arch_lwip_poll
+        )
+
+# Add the standard include files to the build
+target_include_directories(${PROJECT_NAME} PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR} #root
+        ${CMAKE_CURRENT_LIST_DIR}/include #/include
+
+) #new style
+
+pico_add_extra_outputs(${PROJECT_NAME})
