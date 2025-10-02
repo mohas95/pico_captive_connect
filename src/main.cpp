@@ -24,9 +24,9 @@ static void poll_wait() {
 }
 
 
-static bool try_sta_connect(const WifiCreds &c, char *ipbuf, size_t ipbuflen) {
+static bool try_sta_connect(const DeviceCreds &c, char *ipbuf, size_t ipbuflen) {
     printf("STA: connecting to '%s'...\n", c.ssid);
-    if (cyw43_arch_wifi_connect_timeout_ms(c.ssid, c.pass, CYW43_AUTH_WPA2_AES_PSK, 20000)) {
+    if (cyw43_arch_wifi_connect_timeout_ms(c.ssid, c.wifi_pass, CYW43_AUTH_WPA2_AES_PSK, 20000)) {
         printf("STA: connect failed\n");
         return false;
     }
@@ -73,7 +73,7 @@ int main() {
         return -1;
     }
 
-    WifiCreds c{};
+    DeviceCreds c{};
     bool have = creds_load(c);
 
     if (have) {
@@ -103,8 +103,8 @@ int main() {
     // Loop until creds saved -> we will just watch flash region periodically
     // (Simple approach: user hits 'Save & Connect', device writes flash, then we reboot.)
     for (;;) {
-        WifiCreds nc{};
-        if (creds_load(nc) && (!have || strcmp(nc.ssid, c.ssid) || strcmp(nc.pass, c.pass))) {
+        DeviceCreds nc{};
+        if (creds_load(nc) && (!have || strcmp(nc.ssid, c.ssid) || strcmp(nc.wifi_pass, c.wifi_pass))) {
             printf("New creds saved. Rebooting to connect...\n");
             sleep_ms(500);
             dns_hijack_stop();

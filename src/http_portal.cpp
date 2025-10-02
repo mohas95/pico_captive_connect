@@ -10,6 +10,7 @@ static const char *PAGE =
 "<form method='POST' action='/save'>"
 "SSID:<br><input name='s' maxlength='32'><br>"
 "Password:<br><input name='p' type='password' maxlength='64'><br><br>"
+"Device Hostname:<br><input name='n' maxlength='31'><br><br>"
 "<button type='submit'>Save & Connect</button>"
 "</form></body></html>";
 
@@ -33,16 +34,26 @@ static void parse_and_save(const char *body, size_t len) {
     // parse s=...&p=...
     char buf[200]; if (len >= sizeof(buf)) len = sizeof(buf)-1;
     memcpy(buf, body, len); buf[len]=0;
-    WifiCreds c{}; c.valid=false;
+    DeviceCreds c{}; c.valid=false;
     char *tok = strtok(buf, "&");
     while (tok) {
         if (!strncmp(tok,"s=",2)) { strncpy(c.ssid, tok+2, sizeof(c.ssid)-1); url_decode(c.ssid); }
-        else if (!strncmp(tok,"p=",2)) { strncpy(c.pass, tok+2, sizeof(c.pass)-1); url_decode(c.pass); }
+        else if (!strncmp(tok,"p=",2)) { strncpy(c.wifi_pass, tok+2, sizeof(c.wifi_pass)-1); url_decode(c.wifi_pass); }
+        else if (!strncmp(tok,"n=",2)) { strncpy(c.hostname, tok+2, sizeof(c.hostname)-1); url_decode(c.hostname); }
         tok = strtok(nullptr, "&");
     }
     if (c.ssid[0]) { 
         c.valid=true; 
-        printf("Saving creds: SSID='%s', PASS='%s'\n", c.ssid, c.pass); // <-- debug
+        
+        // Mask the password with '*' but keep the same length
+        char masked_pass[65];
+        size_t pass_len = strlen(c.wifi_pass);
+        if (pass_len >= sizeof(masked_pass)) pass_len = sizeof(masked_pass) - 1;
+        memset(masked_pass, '*', pass_len);
+        masked_pass[pass_len] = '\0';
+
+        printf("Saving creds: SSID='%s', PASS='%s', Device Hostname='%s'\n", c.ssid, masked_pass, c.hostname); // <-- debug
+        // printf("Saving creds: SSID='%s', PASS='%s'\n", c.ssid, c.wifi_pass); // <-- debug
         creds_save(c); 
     }
 

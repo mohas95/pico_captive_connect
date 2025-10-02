@@ -15,7 +15,7 @@
 struct Blob {
     uint32_t magic;
     uint32_t crc;
-    WifiCreds creds;
+    DeviceCreds creds;
 };
 
 static uint32_t crc32(const void *data, size_t len){
@@ -29,21 +29,21 @@ static uint32_t crc32(const void *data, size_t len){
     return ~c;
 }
 
-bool creds_load(WifiCreds &out) {
+bool creds_load(DeviceCreds &out) {
     const Blob *b = (const Blob*)(XIP_BASE + CREDS_FLASH_OFFSET);
     if (b->magic != CREDS_MAGIC) return false;
-    uint32_t calc = crc32(&b->creds, sizeof(WifiCreds));
+    uint32_t calc = crc32(&b->creds, sizeof(DeviceCreds));
     if (calc != b->crc) return false;
     out = b->creds;
     return out.valid;
 }
 
-bool creds_save(const WifiCreds &in) {
+bool creds_save(const DeviceCreds &in) {
     Blob b{};
     b.magic = CREDS_MAGIC;
     b.creds = in;
     b.creds.valid = true;
-    b.crc = crc32(&b.creds, sizeof(WifiCreds));
+    b.crc = crc32(&b.creds, sizeof(DeviceCreds));
 
     uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(CREDS_FLASH_OFFSET, FLASH_SECTOR_SIZE);
