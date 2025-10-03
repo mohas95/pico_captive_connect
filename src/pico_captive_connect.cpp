@@ -1,4 +1,4 @@
-#include "pico_netlib.h"
+#include "pico_captive_connect.h"
 #include "creds_store.h"
 #include "http_portal.h"
 #include "dns_hijack.h"
@@ -82,7 +82,7 @@ static void start_sta_mode(){
 // --- Public API ---
 
 void net_init() {
-    printf("\n[PicoNetLib] init (threadsafe background)\n");
+    printf("\n[pico_captive_connect] init (threadsafe background)\n");
 
     if (cyw43_arch_init()) {
         printf("CYW43 init failed\n");
