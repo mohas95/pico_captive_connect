@@ -126,6 +126,7 @@ void net_task() {
         DeviceCreds nc{};
         if (creds_load(nc) && (strcmp(nc.ssid, creds.ssid) || strcmp(nc.wifi_pass, creds.wifi_pass))) {
             printf("New creds saved. Rebooting to connect...\n");
+            creds=nc;
             sleep_ms(500);
             dns_hijack_stop();
             dhcp_server_deinit(&dhcp);
@@ -218,13 +219,18 @@ void mqtt_try_connect() {
 
 
 bool mqtt_is_connected() {
-    return connected && mqtt_client_handle && mqtt_client_is_connected(mqtt_client_handle);
+    return connected && mqtt_client_handle;
 }
 
 bool publish_mqtt(const char* topic, const char* payload, size_t len) {
     if (!mqtt_is_connected()) return false;
-    err_t err = mqtt_publish(mqtt_client_handle, topic, payload, len, 0, 0, NULL, NULL);
-    return (err == ERR_OK);
+    err_t err = mqtt_publish(mqtt_client_handle, topic, payload, len,
+                             0, 0, NULL, NULL);
+    if (err != ERR_OK) {
+        printf("[MQTT] publish failed, err=%d\n", err);
+        return false;
+    }
+    return true;
 }
 
 const char* net_hostname() {
