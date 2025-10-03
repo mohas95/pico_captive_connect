@@ -16,6 +16,7 @@
 
 struct DeviceCreds{
     bool valid;
+    bool dirty;
     
     // wifi creds
     char ssid[33];  //32+NUL
@@ -34,5 +35,5 @@ struct DeviceCreds{
 };
 
 bool creds_load(DeviceCreds &out);
-bool creds_save(const DeviceCreds &in);
+bool creds_save(const DeviceCreds &in, bool mark_dirty = false);
 void creds_clear();

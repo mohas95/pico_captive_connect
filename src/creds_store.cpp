@@ -35,14 +35,25 @@ bool creds_load(DeviceCreds &out) {
     uint32_t calc = crc32(&b->creds, sizeof(DeviceCreds));
     if (calc != b->crc) return false;
     out = b->creds;
+
+    if (out.dirty) {
+        // clear dirty immediately so we don't reboot repeatedly
+        DeviceCreds cleared = out;
+        cleared.dirty = false;
+        creds_save(cleared);
+    }
+
     return out.valid;
 }
 
-bool creds_save(const DeviceCreds &in) {
+bool creds_save(const DeviceCreds &in, bool mark_dirty) {
     Blob b{};
     b.magic = CREDS_MAGIC;
     b.creds = in;
     b.creds.valid = true;
+    if (mark_dirty) {
+        b.creds.dirty = true;
+    }
     b.crc = crc32(&b.creds, sizeof(DeviceCreds));
 
     uint32_t ints = save_and_disable_interrupts();

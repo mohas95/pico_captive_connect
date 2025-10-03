@@ -79,7 +79,7 @@ static void parse_and_save(const char *body, size_t len) {
 
         printf("Saving creds: SSID='%s', PASS='%s', Device Hostname='%s'\n", c.ssid, masked_pass, c.hostname); // <-- debug
         // printf("Saving creds: SSID='%s', PASS='%s'\n", c.ssid, c.wifi_pass); // <-- debug
-        creds_save(c); 
+        creds_save(c, true); 
     }
 
 }
