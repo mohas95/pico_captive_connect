@@ -10,6 +10,7 @@
 #include "lwip/netif.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/apps/mqtt.h"
+#include "lwip/dns.h"
 #include <cstdio>
 #include <cstring>
 #include "hardware/watchdog.h"
@@ -18,6 +19,8 @@ static dhcp_server_t dhcp;
 static DeviceCreds creds;
 static bool connected = false;
 static mqtt_client_t* mqtt_client_handle = nullptr;
+static absolute_time_t mqtt_connect_next_attempt = 0;
+
 
 // internal helpers (similar to your current main.cpp)
 static bool try_sta_connect(const DeviceCreds &c, char *ipbuf, size_t ipbuflen) {
@@ -79,6 +82,27 @@ static void start_sta_mode(){
     start_ap_mode();
 }
 
+
+bool creds_are_valid(const DeviceCreds &c) {
+    if (!c.valid) return false;
+
+    // Require at least SSID and password (or allow open WiFi if you want)
+    if (c.ssid[0] == '\0') return false;
+    // You might allow empty wifi_pass for open networks, so maybe don’t force that
+
+    return true;
+}
+
+
+bool mqtt_creds_are_valid(const DeviceCreds &c){
+
+    if (c.mqtt_host[0] == '\0') return false;
+    if (c.mqtt_port == 0) return false;
+
+    return true;
+}
+
+
 // --- Public API ---
 
 void net_init() {
@@ -89,7 +113,7 @@ void net_init() {
         return;
     }
 
-    if (creds_load(creds)) {
+    if (creds_load(creds) && creds_are_valid(creds)) {
         start_sta_mode();
     } else {
         start_ap_mode();
@@ -121,8 +145,80 @@ void net_task() {
 
 bool net_is_connected() { return connected; }
 
+static void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection_status_t status){
+    if (status == MQTT_CONNECT_ACCEPTED){
+        printf("[MQTT] Connected!\n");
+    } else{
+        printf("[MQTT] Connection failed, status=%d!\n", status);
+        mqtt_client_handle = nullptr;    
+    }
+}
+
+bool mqtt_connect(){
+
+    if (!mqtt_creds_are_valid(creds)) {
+        printf("[MQTT] Skipping connect: no broker configured.\n");
+        return false;
+    }
+
+    if(!net_is_connected()){
+        printf("[MQTT] WIFI  is not connected. \n");
+        return false;
+    }
+
+    if (mqtt_client_handle){
+        printf("[MQTT] Already Connected \n"); 
+        return true;
+    }
+
+    ip_addr_t broker_ip;
+    err_t err = dns_gethostbyname(creds.mqtt_host, &broker_ip, NULL, NULL);
+    if(err == ERR_INPROGRESS){
+        printf("[MQTT] Resolving hostname ...\n");
+
+        return false;
+    } else if (err != ERR_OK) {
+        printf("[MQTT] DNS lookup failed for %s\n", creds.mqtt_host);
+        return false;
+    }
+
+    mqtt_client_handle = mqtt_client_new();
+    if(!mqtt_client_handle){
+        printf("[MQTT] Failed to allocate client. \n");
+        return false;
+    }
+
+    mqtt_connect_client_info_t ci{};
+    ci.client_id = creds.hostname[0] ? creds.hostname : "pico-client";
+    ci.client_user = creds.mqtt_user[0] ? creds.mqtt_user : NULL;
+    ci.client_pass = creds.mqtt_pass[0] ? creds.mqtt_pass : NULL;
+
+    err = mqtt_client_connect(mqtt_client_handle, &broker_ip, creds.mqtt_port ? creds.mqtt_port : 1883, mqtt_connection_cb, NULL, &ci);
+
+    if (err != ERR_OK){
+        printf("[MQTT] Connect failed err=%d\n", err);
+        mqtt_client_handle = nullptr;
+        return false;
+    }
+
+    printf("[MQTT] Connecting to %s:%d... \n", creds.mqtt_host, creds.mqtt_port);
+    return true;
+}
+
+
+void mqtt_try_connect() {
+    if (absolute_time_diff_us(get_absolute_time(), mqtt_connect_next_attempt) > 0) {
+        return; // wait until timeout
+    }
+    if (!mqtt_connect()) {
+        // failed, try again in 5 seconds
+        mqtt_connect_next_attempt = make_timeout_time_ms(5000);
+    }
+}
+
+
 bool mqtt_is_connected() {
-    return connected && mqtt_client_handle; // refine if needed
+    return connected && mqtt_client_handle && mqtt_client_is_connected(mqtt_client_handle);
 }
 
 bool publish_mqtt(const char* topic, const char* payload, size_t len) {

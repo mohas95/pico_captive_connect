@@ -12,10 +12,15 @@ int main(){
     while (true){
         net_task();
 
+        if (net_is_connected() && !mqtt_is_connected()){
+            mqtt_try_connect();
+        }
+
         if(mqtt_is_connected()) {
             const char* msg = "{\"temp\":23.5}";
             publish_mqtt("sensors/temp", msg, strlen(msg));
         }
+
         sleep_ms(1000);
     }
 }
