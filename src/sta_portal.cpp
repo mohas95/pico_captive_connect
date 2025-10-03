@@ -41,15 +41,46 @@ static const char *PAGE =
 "</body></html>";
 
 
+// static void send_config_page(struct tcp_pcb *tpcb) {
+//     DeviceCreds c{};
+//     creds_load(c);  // load saved creds (if any)
+
+//     char page[1024];
+//     snprintf(page, sizeof(page),
+//         "HTTP/1.1 200 OK\r\n"
+//         "Content-Type: text/html\r\n"
+//         "Connection: close\r\n\r\n"
+//         "<!doctype html><html><body style='font-family:sans-serif'>"
+//         "<h2>Pico Device Configuration</h2>"
+//         "<p>Device is connected to Wi-Fi.</p>"
+//         "<form method='POST' action='/save_mqtt'>"
+//         "MQTT Host:<br><input name='h' maxlength='63' value='%s'><br>"
+//         "Port:<br><input name='o' maxlength='5' value='%d'><br>"
+//         "Username:<br><input name='u' maxlength='31' value='%s'><br>"
+//         "Password:<br><input name='w' type='password' maxlength='31' value=''><br><br>"
+//         "Device Hostname:<br><input name='n' maxlength='31' value='%s'><br><br>"
+//         "<button type='submit'>Save & Reboot</button>"
+//         "</form><br>"
+//         "<form method='POST' action='/reprovision'>"
+//         "<button type='submit'>Re-Provision Wi-Fi</button>"
+//         "</form>"
+//         "</body></html>",
+//         c.mqtt_host[0] ? c.mqtt_host : "",
+//         c.mqtt_port ? c.mqtt_port : 1883,   // default 1883 if none saved
+//         c.mqtt_user[0] ? c.mqtt_user : "",
+//         c.hostname[0] ? c.hostname : "pico-device"
+//     );
+
+//     tcp_write(tpcb, page, strlen(page), TCP_WRITE_FLAG_COPY);
+// }
+
 static void send_config_page(struct tcp_pcb *tpcb) {
     DeviceCreds c{};
     creds_load(c);  // load saved creds (if any)
 
-    char page[1024];
-    snprintf(page, sizeof(page),
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html\r\n"
-        "Connection: close\r\n\r\n"
+    // --- Build HTML body dynamically ---
+    char body[1024];
+    int body_len = snprintf(body, sizeof(body),
         "<!doctype html><html><body style='font-family:sans-serif'>"
         "<h2>Pico Device Configuration</h2>"
         "<p>Device is connected to Wi-Fi.</p>"
@@ -66,13 +97,37 @@ static void send_config_page(struct tcp_pcb *tpcb) {
         "</form>"
         "</body></html>",
         c.mqtt_host[0] ? c.mqtt_host : "",
-        c.mqtt_port ? c.mqtt_port : 1883,   // default 1883 if none saved
+        c.mqtt_port ? c.mqtt_port : 1883,   // default to 1883 if not set
         c.mqtt_user[0] ? c.mqtt_user : "",
         c.hostname[0] ? c.hostname : "pico-device"
     );
 
-    tcp_write(tpcb, page, strlen(page), TCP_WRITE_FLAG_COPY);
+    if (body_len < 0 || body_len >= (int)sizeof(body)) {
+        printf("send_config_page: body truncated!\n");
+        return;
+    }
+
+    // --- Build HTTP header with Content-Length ---
+    char header[128];
+    int header_len = snprintf(header, sizeof(header),
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html\r\n"
+        "Content-Length: %d\r\n"
+        "Connection: close\r\n\r\n",
+        body_len
+    );
+
+    if (header_len < 0 || header_len >= (int)sizeof(header)) {
+        printf("send_config_page: header truncated!\n");
+        return;
+    }
+
+    // --- Send header and body ---
+    tcp_write(tpcb, header, header_len, TCP_WRITE_FLAG_COPY);
+    tcp_write(tpcb, body, body_len, TCP_WRITE_FLAG_COPY);
+    tcp_output(tpcb);
 }
+
 
 
 
@@ -140,7 +195,7 @@ static err_t on_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
     size_t n = pbuf_copy_partial(p, req, sizeof(req)-1, 0);
     req[n] = 0;
 
-    printf("STA HTTP on_recv (len=%u):\n%.*s\n", (unsigned)p->tot_len, (int)n, req);
+    // printf("STA HTTP on_recv (len=%u):\n%.*s\n", (unsigned)p->tot_len, (int)n, req);
 
     if (!strncmp(req, "GET / ", 6)) {
         // tcp_write(tpcb, PAGE, strlen(PAGE), TCP_WRITE_FLAG_COPY);

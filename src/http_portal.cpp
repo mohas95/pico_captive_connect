@@ -14,6 +14,31 @@ static const char *PAGE =
 "<button type='submit'>Save & Connect</button>"
 "</form></body></html>";
 
+
+static const char *PAGE_HTML =
+"<!doctype html><html><body style='font-family:sans-serif'>"
+"<h2>Pico Wi-Fi Setup</h2>"
+"<form method='POST' action='/save'>"
+"SSID:<br><input name='s' maxlength='32'><br>"
+"Password:<br><input name='p' type='password' maxlength='64'><br><br>"
+"Device Hostname:<br><input name='n' maxlength='31'><br><br>"
+"<button type='submit'>Save & Connect</button>"
+"</form></body></html>";
+
+static void send_page(struct tcp_pcb *tpcb) {
+    char hdr[128];
+    snprintf(hdr, sizeof(hdr),
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html\r\n"
+        "Content-Length: %u\r\n"
+        "Connection: close\r\n\r\n",
+        (unsigned)strlen(PAGE_HTML));
+
+    tcp_write(tpcb, hdr, strlen(hdr), TCP_WRITE_FLAG_COPY);
+    tcp_write(tpcb, PAGE_HTML, strlen(PAGE_HTML), TCP_WRITE_FLAG_COPY);
+}
+
+
 static const char *OK =
 "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nSaved. Connecting…\n";
 
@@ -62,10 +87,11 @@ static void parse_and_save(const char *body, size_t len) {
 static err_t on_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
     if (!p) { tcp_close(tpcb); return ERR_OK; }
     char req[1024]; size_t n = pbuf_copy_partial(p, req, sizeof(req)-1, 0); req[n]=0;
-    printf("HTTP request:\n%s\n", req); // <-- dump the full request
+    // printf("HTTP request:\n%s\n", req); // <-- dump the full request
 
     if (!strncmp(req, "GET / ", 6)) {
-        tcp_write(tpcb, PAGE, strlen(PAGE), TCP_WRITE_FLAG_COPY);
+        // tcp_write(tpcb, PAGE, strlen(PAGE), TCP_WRITE_FLAG_COPY);
+        send_page(tpcb);
     } else if (!strncmp(req, "POST /save", 10)) {
         // find body
         const char *body = strstr(req, "\r\n\r\n");

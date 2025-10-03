@@ -37,6 +37,7 @@ add_executable( ${PROJECT_NAME}
         src/sta_portal.cpp
         src/dns_hijack.cpp
         src/dhcpserver.c
+        src/pico_netlib.cpp
 )
 
 pico_set_program_name(${PROJECT_NAME} "pico_web")
@@ -49,7 +50,9 @@ pico_enable_stdio_usb(${PROJECT_NAME} 1)
 # Add the standard library to the build
 target_link_libraries(${PROJECT_NAME}
         pico_stdlib
-        pico_cyw43_arch_lwip_poll
+        pico_cyw43_arch_lwip_threadsafe_background
+        # pico_cyw43_arch_lwip_poll
+        pico_lwip_mqtt
         )
 
 # Add the standard include files to the build
