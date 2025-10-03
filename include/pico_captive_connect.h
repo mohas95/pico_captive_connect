@@ -11,9 +11,9 @@ void net_task();
 // Query state
 bool net_is_connected();   // true if Wi-Fi STA connected + IP
 bool mqtt_is_connected();  // true if MQTT session is alive
+
+//mqtt api
 bool mqtt_connect();
 void mqtt_try_connect();
-// Publish convenience wrapper
 bool publish_mqtt(const char* topic, const char* payload, size_t len);
-// Access hostname (stored in creds)
 const char* net_hostname();

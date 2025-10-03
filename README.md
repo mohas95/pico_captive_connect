@@ -1,48 +1,110 @@
-# Pico Web Captive Portal
+# Pico Captive Portal and MQTT Client
+#### Author: Mohamed Debbagh
 
-This project turns a **Raspberry Pi Pico W / Pico2 W** into a **Wi-Fi access point with captive portal** that can also connect to an existing Wi-Fi network (STA mode). It provides an HTTP setup portal, DHCP/DNS services, and optional mDNS support for easy device discovery.
+This library provides a **captive portal and network provisioning system** for the **Raspberry Pi Pico W / Pico2 W**.  
+It allows your project to automatically bring up a Wi-Fi access point for configuration, save credentials in flash,  
+connect to a Wi-Fi network (STA mode), and  connect and publish to an MQTT broker.
 
 ---
 
 ## Features
 
-- **Captive Portal (AP mode)**  
-  - Starts as a Wi-Fi access point (`PicoSetup` / password: `pico1234`).  
-  - Runs a built-in DHCP server and DNS hijack so any URL resolves to the setup page.  
-  - Hosts a provisioning HTTP portal (`http://setup/`) to configure Wi-Fi credentials.
+- **Captive Portal (AP mode)**
+  - Starts Pico W as an access point (`SSID: PicoSetup`, password: `pico1234`).
+  - Runs a built-in DHCP server and DNS hijack (all requests → setup page).
+  - HTTP configuration portal at `http://setup/` (or `192.168.4.1`).
 
-- **Wi-Fi Client (STA mode)**  
-  - Connects to a saved SSID and password.  
-  - If successful, starts the web server on the assigned IP.  
-  - Stores Wi-Fi credentials in flash (persistent across reboots).
+- **STA (Station) Mode**
+  - Connects to stored Wi-Fi credentials.
+  - Launches a lightweight HTTP server at its assigned IP.
+  - Stores MQTT credentials persistently in flash.
 
-- **Automatic Fallback**  
-  - If STA connection fails, falls back to AP + captive portal mode for re-provisioning.
+- **Automatic Fallback**
+  - If STA connection fails, falls back to AP provisioning mode.
 
-- **Optional mDNS support** (if your SDK build includes `LWIP_MDNS_RESPONDER`)  
-  - Can advertise as `http://pico.local`.  
-  - Provides service discovery (`_http._tcp`).
+- **MQTT Support**
+  - Configure MQTT broker/username/password via the STA portal.
+  - Connect and publish sensor data.
+  - Persistent across reboots.
+
+---
+## Requirements 
+- Raspberry Pi Pico W / Pico2 W
+- Pico SDK
+- CMake build system
 
 ---
 
-## Project Structure
+## API Reference
+
+```c
+// Initialize networking (STA mode if creds exist, otherwise AP mode)
+void net_init();
+
+// Background service (must be called often in main loop)
+void net_task();
+
+// Wi-Fi connection state
+bool net_is_connected();   // true if Wi-Fi STA connected + IP
+
+// MQTT state
+bool mqtt_is_connected();  // true if MQTT session is alive
+bool mqtt_connect();       // connect to broker (from saved creds)
+void mqtt_try_connect();   // use this one: provides a timeout safe method for connecting to the broker.
+bool publish_mqtt(const char* topic, const char* payload, size_t len); // publish to mqtt broker.
+
+// Device identity
+const char* net_hostname(); // user-defined or "pico-device"
+```
+---
+## Example usage
+
+To pull this library to your c++ project:
+
+```bash
+git clone https://github.com/mohas95/pico_captive_connect.git
+```
+then in your CMakeLists.txt add: 
+```cmake
+add_subdirectory(<path to library>/pico_captive_connect)
+
+target_link_libraries(my_project pico_captive_connect)
+```
+
+Then in your project code:
+
+``` cpp
+#include "pico/stdlib.h"
+#include "pico_captive_connect.h"
+#include <cstring>
+
+int main(){
+
+    stdio_init_all();
+    sleep_ms(1000);
+    
+    net_init();
+
+    while (true){
+        net_task();
+
+        if (net_is_connected() && !mqtt_is_connected()){
+            mqtt_try_connect();
+        }
+
+        if(mqtt_is_connected()) {
+            const char* msg = "{\"temp\":23.5}";
+            publish_mqtt("sensors/temp", msg, strlen(msg));
+        }
+
+        sleep_ms(1000);
+    }
+}
 
 ```
-src/
- ├── main.cpp         # Main firmware logic
- ├── creds_store.h/.c # Store/load Wi-Fi credentials in flash
- ├── http_portal.*    # Simple captive portal HTTP server
- ├── dns_hijack.*     # DNS hijack for redirecting requests
- ├── dhcpserver.*     # Lightweight DHCP server
- ├── sta_portal.*     # Web server for STA mode
-CMakeLists.txt
-README.md
-
-```
-
 ---
 
-## Usage
+## User Interface Usage
 
 
 1. **First boot**  
@@ -61,3 +123,33 @@ README.md
    - You can go back to **AP mode** by accessing the configuration page at the assigned IP
    - Press reset if Wi-Fi fails, it falls back to AP mode.  
    - Update credentials via captive portal.
+
+---
+
+## Project Structure
+
+```
+pico_captive_connect/
+├── include/                       # Public headers (for users to include)
+│   ├── creds_store.h              # Flash credential storage API
+│   ├── dhcpserver.h               # Lightweight DHCP server
+│   ├── dns_hijack.h               # DNS hijack for captive portal redirect
+│   ├── http_portal.h              # Captive portal HTTP server
+│   ├── lwipopts.h                 # lwIP configuration
+│   ├── pico_captive_connect.h     # Main library API (net_init, net_task, MQTT API)
+│   └── sta_portal.h               # Web server for STA mode
+│
+├── src/                           # Implementation files
+│   ├── creds_store.cpp
+│   ├── dhcpserver.c
+│   ├── dns_hijack.cpp
+│   ├── http_portal.cpp
+│   ├── pico_captive_connect.cpp   # Core library logic
+│   ├── sta_portal.cpp
+│   └── main.cpp                   # Example app (can be excluded when used as library)
+│
+├── CMakeLists.txt                 # CMake build setup
+├── .gitignore
+└── README.md
+```
+---
