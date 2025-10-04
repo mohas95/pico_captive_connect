@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "pico/rand.h"
+#include "hardware/watchdog.h"
 
 
 
@@ -18,6 +19,7 @@ float random_temp(){
 int main() {
     stdio_init_all();
     sleep_ms(1000);
+
 
     srand(to_ms_since_boot(get_absolute_time()));
 
@@ -39,14 +41,13 @@ int main() {
 
             if (publish_mqtt("sensors/temp", msg, strlen(msg))) {
                 printf("[APP] Published temp message: %.2f\n", temp);
-                next_pub = make_timeout_time_ms(1000); // normal period
+                next_pub = make_timeout_time_ms(2000); // normal period
             } else {
                 printf("[APP] Publish failed, backing off\n");
                 next_pub = make_timeout_time_ms(5000); // backoff if error
             }
         }
 
-        // Let background tasks run frequently
-        sleep_ms(10);
+        sleep_ms(100);
     }
 }

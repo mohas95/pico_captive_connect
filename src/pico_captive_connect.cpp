@@ -12,6 +12,7 @@
 #include "lwip/apps/mqtt.h"
 #include "lwip/dns.h"
 #include "lwip/timeouts.h"
+// #include "lwip/tcp.h"
 #include <cstdio>
 #include <cstring>
 #include "hardware/watchdog.h"
@@ -22,6 +23,7 @@ static bool connected = false;
 static mqtt_client_t* mqtt_client_handle = nullptr;
 static absolute_time_t mqtt_connect_next_attempt = 0;
 static bool in_ap_mode = false;
+static bool mqtt_inflight = false; 
 
 // New state machine for MQTT
 enum MqttState {
@@ -140,6 +142,14 @@ bool net_is_connected() {
     if (in_ap_mode) return false; // never "connected" in AP mode
     auto *netif = netif_list;
     return netif && netif_is_up(netif) && connected;
+
+    // struct netif* nif = netif_list;
+    // bool ip_up = (nif && netif_is_up(nif) && netif_is_link_up(nif));
+
+    // int ls = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
+    // bool link_ok = (ls == CYW43_LINK_UP);
+    
+    // return ip_up && link_ok &&  connected;
 }
 
 // ------------------- MQTT -------------------
@@ -147,11 +157,23 @@ bool net_is_connected() {
 static void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection_status_t status){
     if (status == MQTT_CONNECT_ACCEPTED){
         printf("[MQTT] Connected!\n");
+        mqtt_inflight = false; 
         mqtt_state = MQTT_CONNECTED;
+
     } else {
         printf("[MQTT] Connection failed, status=%d!\n", status);
         mqtt_state = MQTT_DISCONNECTED;
         mqtt_client_handle = nullptr;
+        mqtt_inflight = false; 
+    }
+}
+
+static void mqtt_pub_cb(void *arg, err_t result) {
+    mqtt_inflight = false; 
+    if (result == ERR_OK) {
+        // printf("[MQTT] Publish confirmed\n");
+    } else {
+        printf("[MQTT] Publish failed with err=%d\n", result);
     }
 }
 
@@ -228,13 +250,36 @@ bool mqtt_is_connected() {
     return (mqtt_state == MQTT_CONNECTED);
 }
 
+// bool publish_mqtt(const char* topic, const char* payload, size_t len) {
+//     if (!mqtt_is_connected()) return false;
+//     if (mqtt_inflight) return false;
+    
+//     err_t err = mqtt_publish(mqtt_client_handle, topic, payload, len, 0, 0, mqtt_pub_cb, NULL);
+//     if (err != ERR_OK) {
+//         printf("[MQTT] publish failed, err=%d\n", err);
+//         return false;
+//     }
+
+//     mqtt_inflight = true;
+//     return true;
+// }
+
 bool publish_mqtt(const char* topic, const char* payload, size_t len) {
     if (!mqtt_is_connected()) return false;
-    err_t err = mqtt_publish(mqtt_client_handle, topic, payload, len, 0, 0, NULL, NULL);
+    if (mqtt_inflight) return false;
+
+    err_t err = mqtt_publish(mqtt_client_handle, topic, payload, len, 0, 0, mqtt_pub_cb, NULL);
+    if (err == ERR_MEM) {
+        // lwIP queue full, don't panic, just retry later
+        printf("[MQTT] ERR_MEM (queue full), will retry\n");
+        return false;
+    }
     if (err != ERR_OK) {
         printf("[MQTT] publish failed, err=%d\n", err);
         return false;
     }
+
+    mqtt_inflight = true;
     return true;
 }
 
