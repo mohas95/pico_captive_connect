@@ -20,9 +20,14 @@ int main() {
     stdio_init_all();
     sleep_ms(1000);
 
+    if (watchdog_caused_reboot()) {
+        printf("[BOOT] System rebooted due to watchdog timeout!\n");
+    } else {
+        printf("[BOOT] Normal boot or manual reset.\n");
+    }
 
     srand(to_ms_since_boot(get_absolute_time()));
-
+    
     net_init();
 
     watchdog_enable(30000, 1); 
