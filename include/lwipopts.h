@@ -101,5 +101,10 @@
 #define SLIP_DEBUG                  LWIP_DBG_OFF
 #define DHCP_DEBUG                  LWIP_DBG_OFF
 
+#define TCP_KEEPIDLE_DEFAULT     60000  // 60s
+#define TCP_KEEPINTVL_DEFAULT    10000  // 10s
+#define TCP_KEEPCNT_DEFAULT      3
+
+
 #define LWIP_MQTT                   1
 #endif /* _LWIPOPTS_H */

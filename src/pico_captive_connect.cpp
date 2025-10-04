@@ -24,6 +24,9 @@ static mqtt_client_t* mqtt_client_handle = nullptr;
 static absolute_time_t mqtt_connect_next_attempt = 0;
 static bool in_ap_mode = false;
 static bool mqtt_inflight = false; 
+static absolute_time_t next_check = 0;
+static int lost_counter = 0;
+
 
 // New state machine for MQTT
 enum MqttState {
@@ -136,6 +139,34 @@ void net_task() {
 
     sys_check_timeouts();
     tight_loop_contents();
+
+    // reboot if Wi-Fi disconnects unexpectedly
+    if (absolute_time_diff_us(get_absolute_time(), next_check) < 0) {
+        next_check = make_timeout_time_ms(5000);
+
+        if (!in_ap_mode) {
+            int status = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
+
+            // Only count as "lost" if fully disconnected or auth failed
+            bool truly_down = (
+                status == CYW43_LINK_DOWN ||
+                status == CYW43_LINK_BADAUTH ||
+                status == CYW43_LINK_NONET
+            );
+
+            if (truly_down) {
+                if (++lost_counter > 6) {   // e.g. 6×5 s = 30 s of real loss
+                    printf("[NET] Wi-Fi link lost (status=%d, counter=%d). Rebooting...\n", status, lost_counter);
+                    dns_hijack_stop();
+                    dhcp_server_deinit(&dhcp);
+                    cyw43_arch_deinit();
+                    watchdog_reboot(0, 0, 0);
+                }
+            } else {
+                lost_counter = 0;  // reset whenever link is OK
+            }
+        }
+    }
 }
 
 bool net_is_connected() {
@@ -218,6 +249,7 @@ bool mqtt_connect(){
     ci.client_id = creds.hostname[0] ? creds.hostname : "pico-client";
     ci.client_user = creds.mqtt_user[0] ? creds.mqtt_user : NULL;
     ci.client_pass = creds.mqtt_pass[0] ? creds.mqtt_pass : NULL;
+    ci.keep_alive = 60;
 
     err = mqtt_client_connect(mqtt_client_handle, &broker_ip,
                               creds.mqtt_port ? creds.mqtt_port : 1883,

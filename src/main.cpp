@@ -25,7 +25,10 @@ int main() {
 
     net_init();
 
+    watchdog_enable(30000, 1); 
+
     while (true) {
+        watchdog_update();
         net_task();
 
         // If Wi-Fi is up but MQTT not yet, keep retrying
@@ -41,7 +44,7 @@ int main() {
 
             if (publish_mqtt("sensors/temp", msg, strlen(msg))) {
                 printf("[APP] Published temp message: %.2f\n", temp);
-                next_pub = make_timeout_time_ms(2000); // normal period
+                next_pub = make_timeout_time_ms(1000); // normal period
             } else {
                 printf("[APP] Publish failed, backing off\n");
                 next_pub = make_timeout_time_ms(5000); // backoff if error
