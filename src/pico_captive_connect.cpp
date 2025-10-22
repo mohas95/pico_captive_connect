@@ -73,6 +73,8 @@ static void start_ap_mode(){
     http_portal_start();
 
     printf("AP: connect to SSID '%s', password '%s' then open http://setup/\n", ap_ssid, ap_pass);
+    next_sta_retry = make_timeout_time_ms(300000); 
+
 }
 
 static void start_sta_mode(){
@@ -120,7 +122,6 @@ void net_init() {
         start_sta_mode();
     } else {
         start_ap_mode();
-        next_sta_retry = make_timeout_time_ms(300000); 
     }
 }
 
