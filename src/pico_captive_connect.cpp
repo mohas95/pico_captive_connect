@@ -120,7 +120,7 @@ void net_init() {
         start_sta_mode();
     } else {
         start_ap_mode();
-        next_sta_retry = make_timeout_time_ms(60000); 
+        next_sta_retry = make_timeout_time_ms(300000); 
     }
 }
 
