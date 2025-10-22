@@ -172,7 +172,7 @@ void net_task() {
     // Periodically try to reconnect to stored STA credentials if in AP mode
     if (in_ap_mode) {
         if (absolute_time_diff_us(get_absolute_time(), next_sta_retry) < 0) {
-            next_sta_retry = make_timeout_time_ms(30000); // retry every 30s
+            next_sta_retry = make_timeout_time_ms(60000); // retry every 30s
 
             DeviceCreds stored{};
             if (creds_load(stored) && creds_are_valid(stored)) {
