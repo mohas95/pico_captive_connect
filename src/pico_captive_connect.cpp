@@ -180,16 +180,9 @@ void net_task() {
                 char ipbuf[32];
                 if (try_sta_connect(stored, ipbuf, sizeof ipbuf)) {
                     creds = stored;
-                    connected = true;
-                    in_ap_mode = false;
-
-                    dns_hijack_stop();
-                    dhcp_server_deinit(&dhcp);
-                    cyw43_arch_disable_ap_mode();
-
-                    printf("[NET] Reconnected to Wi-Fi, IP=%s\n", ipbuf);
-                    sta_http_start();
-                } else {
+                    start_sta_mode();
+                }
+                else {
                     printf("[NET] STA reconnect failed. Staying in AP mode.\n");
                 }
             } else {
