@@ -120,6 +120,7 @@ void net_init() {
         start_sta_mode();
     } else {
         start_ap_mode();
+        next_sta_retry = make_timeout_time_ms(60000); 
     }
 }
 
@@ -173,7 +174,7 @@ void net_task() {
     if (in_ap_mode) {
         if (absolute_time_diff_us(get_absolute_time(), next_sta_retry) < 0) {
             // Schedule the *next* retry first so we don't hammer this block if anything blocks here
-            next_sta_retry = make_timeout_time_ms(30000); // retry every 30s
+            next_sta_retry = make_timeout_time_ms(300000); // retry every 5 minutes
 
             DeviceCreds stored{};
             if (creds_load(stored) && creds_are_valid(stored)) {
