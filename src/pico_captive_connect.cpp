@@ -25,7 +25,7 @@ static absolute_time_t mqtt_connect_next_attempt = 0;
 static bool in_ap_mode = false;
 static bool mqtt_inflight = false; 
 static absolute_time_t next_check = 0;
-static absolute_time_t next_sta_retry = 0;
+static absolute_time_t next_sta_retry = 60000;
 static int lost_counter = 0;
 
 
