@@ -25,7 +25,7 @@ static absolute_time_t mqtt_connect_next_attempt = 0;
 static bool in_ap_mode = false;
 static bool mqtt_inflight = false; 
 static absolute_time_t next_check = 0;
-static absolute_time_t next_sta_retry = 60000;
+static absolute_time_t next_sta_retry = 0;
 static int lost_counter = 0;
 
 
@@ -172,25 +172,33 @@ void net_task() {
     // Periodically try to reconnect to stored STA credentials if in AP mode
     if (in_ap_mode) {
         if (absolute_time_diff_us(get_absolute_time(), next_sta_retry) < 0) {
-            next_sta_retry = make_timeout_time_ms(60000); // retry every 30s
+            next_sta_retry = make_timeout_time_ms(30000); // retry every 30s
 
             DeviceCreds stored{};
             if (creds_load(stored) && creds_are_valid(stored)) {
                 printf("[NET] Attempting STA reconnect using saved credentials...\n");
+
+                dns_hijack_stop();
+                dhcp_server_deinit(&dhcp);
+                cyw43_arch_disable_ap_mode();
+
+                cyw43_arch_enable_sta_mode();
                 char ipbuf[32];
                 if (try_sta_connect(stored, ipbuf, sizeof ipbuf)) {
                     creds = stored;
-                    start_sta_mode();
-                }
-                else {
-                    printf("[NET] STA reconnect failed. Staying in AP mode.\n");
+                    connected = true;
+                    in_ap_mode = false;
+                    printf("[NET] Reconnected to Wi-Fi, IP=%s\n", ipbuf);
+                    sta_http_start();
+                } else {
+                    printf("[NET] STA reconnect failed. Returning to AP mode.\n");
+                    start_ap_mode();  // restart AP
                 }
             } else {
                 printf("[NET] No valid credentials found. Staying in AP mode.\n");
             }
         }
     }
-
 
 
 }
