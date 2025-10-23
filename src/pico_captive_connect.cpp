@@ -85,7 +85,7 @@ static void start_ap_mode(){
     http_portal_start();
 
     printf("AP: connect to SSID '%s', password '%s' then open http://setup/\n", ap_ssid, ap_pass);
-    // next_sta_retry = make_timeout_time_ms(300000); 
+    next_sta_retry = make_timeout_time_ms(300000); 
 
 }
 
@@ -186,61 +186,81 @@ void net_task() {
     }
 
     // Periodically try to reconnect to stored STA credentials if in AP mode
-    if (in_ap_mode) {
-        if (absolute_time_diff_us(get_absolute_time(), next_sta_retry) < 0) {
-            // Schedule the *next* retry first so we don't hammer this block if anything blocks here
-            next_sta_retry = make_timeout_time_ms(300000); // retry every 5 minutes
 
-            DeviceCreds stored{};
-            if (creds_load(stored) && creds_are_valid(stored)) {
-                printf("[NET] Attempting STA reconnect using saved credentials...\n");
+    if (in_ap_mode && absolute_time_diff_us(get_absolute_time(), next_sta_retry) < 0) {
+    next_sta_retry = make_timeout_time_ms(300000); // retry every 5 minutes
 
-                // --- Cleanly stop AP services BEFORE touching STA ---
-                dns_hijack_stop();
-                dhcp_server_deinit(&dhcp);
-                cyw43_arch_disable_ap_mode();
+    DeviceCreds stored{};
+    if (creds_load(stored) && creds_are_valid(stored)) {
+        printf("[NET] Saved Wi-Fi credentials found — rebooting to retry STA connection...\n");
 
-                // A small yield + pet the dog before long calls
-                watchdog_update();
-                sleep_ms(5);
+        // Gracefully stop network services before reboot
+        dns_hijack_stop();
+        dhcp_server_deinit(&dhcp);
+        cyw43_arch_deinit();
 
-                // --- Switch radio to STA and try to connect ---
-                cyw43_arch_enable_sta_mode();
-
-                // Pet again just before the potentially blocking connect
-                watchdog_update();
-
-                // Keep the timeout modest; you can go up to ~20000 if needed
-                char ipbuf[32];
-                bool ok = (cyw43_arch_wifi_connect_timeout_ms(stored.ssid,
-                                                            stored.wifi_pass,
-                                                            CYW43_AUTH_WPA2_AES_PSK,
-                                                            8000) == 0);
-                watchdog_update(); // pet right after the call returns
-
-                if (ok) {
-                    // Confirm we actually got an IP
-                    struct netif* nif = netif_list;
-                    if (nif && netif_is_up(nif)) {
-                        snprintf(ipbuf, sizeof ipbuf, "%s", ip4addr_ntoa(netif_ip4_addr(nif)));
-                        creds = stored;
-                        connected = true;
-                        in_ap_mode = false;
-                        printf("[NET] Reconnected to Wi-Fi, IP=%s\n", ipbuf);
-                        sta_http_start();
-                    } else {
-                        printf("[NET] STA associated but no DHCP yet; reverting to AP.\n");
-                        start_ap_mode();
-                    }
-                } else {
-                    printf("[NET] STA reconnect failed — reverting to AP mode.\n");
-                    start_ap_mode();  // go back to provisioning
-                }
-            } else {
-                printf("[NET] No valid credentials found. Staying in AP mode.\n");
-            }
-        }
+        sleep_ms(100);
+        watchdog_reboot(0, 0, 0);
+    } else {
+        printf("[NET] No valid credentials found — staying in AP mode.\n");
     }
+}
+
+    // if (in_ap_mode) {
+    //     if (absolute_time_diff_us(get_absolute_time(), next_sta_retry) < 0) {
+    //         // Schedule the *next* retry first so we don't hammer this block if anything blocks here
+    //         next_sta_retry = make_timeout_time_ms(300000); // retry every 5 minutes
+
+    //         DeviceCreds stored{};
+    //         if (creds_load(stored) && creds_are_valid(stored)) {
+    //             printf("[NET] Attempting STA reconnect using saved credentials...\n");
+
+    //             // --- Cleanly stop AP services BEFORE touching STA ---
+    //             dns_hijack_stop();
+    //             dhcp_server_deinit(&dhcp);
+    //             cyw43_arch_disable_ap_mode();
+
+    //             // A small yield + pet the dog before long calls
+    //             watchdog_update();
+    //             sleep_ms(5);
+
+    //             // --- Switch radio to STA and try to connect ---
+    //             cyw43_arch_enable_sta_mode();
+
+    //             // Pet again just before the potentially blocking connect
+    //             watchdog_update();
+
+    //             // Keep the timeout modest; you can go up to ~20000 if needed
+    //             char ipbuf[32];
+    //             bool ok = (cyw43_arch_wifi_connect_timeout_ms(stored.ssid,
+    //                                                         stored.wifi_pass,
+    //                                                         CYW43_AUTH_WPA2_AES_PSK,
+    //                                                         8000) == 0);
+    //             watchdog_update(); // pet right after the call returns
+
+    //             if (ok) {
+    //                 // Confirm we actually got an IP
+    //                 struct netif* nif = netif_list;
+    //                 if (nif && netif_is_up(nif)) {
+    //                     snprintf(ipbuf, sizeof ipbuf, "%s", ip4addr_ntoa(netif_ip4_addr(nif)));
+    //                     creds = stored;
+    //                     connected = true;
+    //                     in_ap_mode = false;
+    //                     printf("[NET] Reconnected to Wi-Fi, IP=%s\n", ipbuf);
+    //                     sta_http_start();
+    //                 } else {
+    //                     printf("[NET] STA associated but no DHCP yet; reverting to AP.\n");
+    //                     start_ap_mode();
+    //                 }
+    //             } else {
+    //                 printf("[NET] STA reconnect failed — reverting to AP mode.\n");
+    //                 start_ap_mode();  // go back to provisioning
+    //             }
+    //         } else {
+    //             printf("[NET] No valid credentials found. Staying in AP mode.\n");
+    //         }
+    //     }
+    // }
 
 }
 
