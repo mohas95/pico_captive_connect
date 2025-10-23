@@ -55,7 +55,19 @@ static bool try_sta_connect(const DeviceCreds &c, char *ipbuf, size_t ipbuflen) 
     return false;
 }
 
+static void net_stop_all() {
+    printf("[NET] Stopping all network services...\n");
+    dns_hijack_stop();
+    dhcp_server_deinit(&dhcp);
+    cyw43_arch_disable_ap_mode();
+    cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);    
+    connected = false;
+}
+
+
 static void start_ap_mode(){
+    net_stop_all();
+
     in_ap_mode = true;
     connected = false;
     const char *ap_ssid = "PicoSetup";
@@ -78,6 +90,8 @@ static void start_ap_mode(){
 }
 
 static void start_sta_mode(){
+    net_stop_all();
+
     in_ap_mode = false;
     cyw43_arch_enable_sta_mode();
     char ip[32];
@@ -235,13 +249,6 @@ bool net_is_connected() {
     auto *netif = netif_list;
     return netif && netif_is_up(netif) && connected;
 
-    // struct netif* nif = netif_list;
-    // bool ip_up = (nif && netif_is_up(nif) && netif_is_link_up(nif));
-
-    // int ls = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
-    // bool link_ok = (ls == CYW43_LINK_UP);
-    
-    // return ip_up && link_ok &&  connected;
 }
 
 // ------------------- MQTT -------------------
