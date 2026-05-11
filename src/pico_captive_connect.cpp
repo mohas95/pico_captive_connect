@@ -23,7 +23,13 @@ static bool connected = false;
 static mqtt_client_t* mqtt_client_handle = nullptr;
 static absolute_time_t mqtt_connect_next_attempt = 0;
 static bool in_ap_mode = false;
-static bool mqtt_inflight = false; 
+static bool mqtt_inflight = false;
+
+static mqtt_message_callback_t user_msg_cb = nullptr;
+static char incoming_topic[128];
+static char incoming_payload[512];
+static size_t incoming_len = 0;
+
 static absolute_time_t next_check = 0;
 static absolute_time_t next_sta_retry = 0;
 static int lost_counter = 0;
@@ -273,11 +279,56 @@ bool net_is_connected() {
 
 // ------------------- MQTT -------------------
 
+static void mqtt_incoming_publish_cb(
+    void *arg,
+    const char *topic,
+    u32_t tot_len
+) {
+    snprintf(incoming_topic, sizeof(incoming_topic), "%s", topic);
+    incoming_len = 0;
+
+    if (tot_len >= sizeof(incoming_payload)) {
+        printf("[MQTT] Incoming payload too large: %lu\n", (unsigned long)tot_len);
+    }
+}
+
+static void mqtt_incoming_data_cb(
+    void *arg,
+    const u8_t *data,
+    u16_t len,
+    u8_t flags
+) {
+    size_t space_left = sizeof(incoming_payload) - 1 - incoming_len;
+
+    if (len > space_left) {
+        len = space_left;
+    }
+
+    memcpy(&incoming_payload[incoming_len], data, len);
+    incoming_len += len;
+    incoming_payload[incoming_len] = '\0';
+
+    if (flags & MQTT_DATA_FLAG_LAST) {
+        if (user_msg_cb) {
+            user_msg_cb(incoming_topic, incoming_payload, incoming_len);
+        }
+
+        incoming_len = 0;
+    }
+}
+
 static void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection_status_t status){
     if (status == MQTT_CONNECT_ACCEPTED){
         printf("[MQTT] Connected!\n");
         mqtt_inflight = false; 
         mqtt_state = MQTT_CONNECTED;
+
+        mqtt_set_inpub_callback(
+            client,
+            mqtt_incoming_publish_cb,
+            mqtt_incoming_data_cb,
+            NULL
+        );
 
     } else {
         printf("[MQTT] Connection failed, status=%d!\n", status);
@@ -295,6 +346,15 @@ static void mqtt_pub_cb(void *arg, err_t result) {
         printf("[MQTT] Publish failed with err=%d\n", result);
     }
 }
+
+static void mqtt_sub_cb(void *arg, err_t result) {
+    if (result == ERR_OK) {
+        printf("[MQTT] Subscribe successful\n");
+    } else {
+        printf("[MQTT] Subscribe failed err=%d\n", result);
+    }
+}
+
 
 bool mqtt_connect(){
     if (!mqtt_creds_are_valid(creds)) {
@@ -383,6 +443,35 @@ bool mqtt_is_connected() {
 //     mqtt_inflight = true;
 //     return true;
 // }
+
+
+
+bool subscribe_mqtt(const char* topic, mqtt_message_callback_t cb) {
+    if (!mqtt_is_connected()) {
+        printf("[MQTT] Cannot subscribe: not connected\n");
+        return false;
+    }
+
+    user_msg_cb = cb;
+
+    err_t err = mqtt_subscribe(
+        mqtt_client_handle,
+        topic,
+        0,
+        mqtt_sub_cb,
+        NULL
+    );
+
+    if (err != ERR_OK) {
+        printf("[MQTT] Subscribe request failed err=%d\n", err);
+        return false;
+    }
+
+    printf("[MQTT] Subscribing to %s\n", topic);
+    return true;
+}
+
+
 
 bool publish_mqtt(const char* topic, const char* payload, size_t len) {
     if (!mqtt_is_connected()) return false;

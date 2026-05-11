@@ -17,3 +17,11 @@ bool mqtt_connect();
 void mqtt_try_connect();
 bool publish_mqtt(const char* topic, const char* payload, size_t len);
 const char* net_hostname();
+
+typedef void (*mqtt_message_callback_t)(
+    const char* topic,
+    const char* payload,
+    size_t len
+);
+
+bool subscribe_mqtt(const char* topic, mqtt_message_callback_t cb);
