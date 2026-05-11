@@ -7,6 +7,7 @@
 #include "hardware/watchdog.h"
 
 #define MQTT_SUB_TOPIC "nutrino/cmd"
+#define MQTT_PUB_TOPIC "sensors/temp"
 static absolute_time_t next_pub = 0;
 
 float random_temp(){
@@ -72,7 +73,7 @@ int main() {
             char msg[64];
             snprintf(msg, sizeof(msg), "{\"temp\":%.2f}", temp);
 
-            if (publish_mqtt("sensors/temp", msg, strlen(msg))) {
+            if (publish_mqtt(MQTT_PUB_TOPIC, msg, strlen(msg))) {
                 printf("[APP] Published temp message: %.2f\n", temp);
                 next_pub = make_timeout_time_ms(1000); // normal period
             } else {
