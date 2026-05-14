@@ -23,7 +23,7 @@ static bool connected = false;
 static mqtt_client_t* mqtt_client_handle = nullptr;
 static absolute_time_t mqtt_connect_next_attempt = 0;
 static bool in_ap_mode = false;
-static bool mqtt_inflight = false;
+// static bool mqtt_inflight = false;
 
 static mqtt_message_callback_t user_msg_cb = nullptr;
 static char incoming_topic[128];
@@ -194,79 +194,23 @@ void net_task() {
     // Periodically try to reconnect to stored STA credentials if in AP mode
 
     if (in_ap_mode && absolute_time_diff_us(get_absolute_time(), next_sta_retry) < 0) {
-    next_sta_retry = make_timeout_time_ms(300000); // retry every 5 minutes
+        next_sta_retry = make_timeout_time_ms(300000); // retry every 5 minutes
 
-    DeviceCreds stored{};
-    if (creds_load(stored) && creds_are_valid(stored)) {
-        printf("[NET] Saved Wi-Fi credentials found — rebooting to retry STA connection...\n");
+        DeviceCreds stored{};
+        if (creds_load(stored) && creds_are_valid(stored)) {
+            printf("[NET] Saved Wi-Fi credentials found — rebooting to retry STA connection...\n");
 
-        // Gracefully stop network services before reboot
-        dns_hijack_stop();
-        dhcp_server_deinit(&dhcp);
-        cyw43_arch_deinit();
+            // Gracefully stop network services before reboot
+            dns_hijack_stop();
+            dhcp_server_deinit(&dhcp);
+            cyw43_arch_deinit();
 
-        sleep_ms(100);
-        watchdog_reboot(0, 0, 0);
-    } else {
-        printf("[NET] No valid credentials found — staying in AP mode.\n");
+            sleep_ms(100);
+            watchdog_reboot(0, 0, 0);
+        } else {
+            printf("[NET] No valid credentials found — staying in AP mode.\n");
+        }
     }
-}
-
-    // if (in_ap_mode) {
-    //     if (absolute_time_diff_us(get_absolute_time(), next_sta_retry) < 0) {
-    //         // Schedule the *next* retry first so we don't hammer this block if anything blocks here
-    //         next_sta_retry = make_timeout_time_ms(300000); // retry every 5 minutes
-
-    //         DeviceCreds stored{};
-    //         if (creds_load(stored) && creds_are_valid(stored)) {
-    //             printf("[NET] Attempting STA reconnect using saved credentials...\n");
-
-    //             // --- Cleanly stop AP services BEFORE touching STA ---
-    //             dns_hijack_stop();
-    //             dhcp_server_deinit(&dhcp);
-    //             cyw43_arch_disable_ap_mode();
-
-    //             // A small yield + pet the dog before long calls
-    //             watchdog_update();
-    //             sleep_ms(5);
-
-    //             // --- Switch radio to STA and try to connect ---
-    //             cyw43_arch_enable_sta_mode();
-
-    //             // Pet again just before the potentially blocking connect
-    //             watchdog_update();
-
-    //             // Keep the timeout modest; you can go up to ~20000 if needed
-    //             char ipbuf[32];
-    //             bool ok = (cyw43_arch_wifi_connect_timeout_ms(stored.ssid,
-    //                                                         stored.wifi_pass,
-    //                                                         CYW43_AUTH_WPA2_AES_PSK,
-    //                                                         8000) == 0);
-    //             watchdog_update(); // pet right after the call returns
-
-    //             if (ok) {
-    //                 // Confirm we actually got an IP
-    //                 struct netif* nif = netif_list;
-    //                 if (nif && netif_is_up(nif)) {
-    //                     snprintf(ipbuf, sizeof ipbuf, "%s", ip4addr_ntoa(netif_ip4_addr(nif)));
-    //                     creds = stored;
-    //                     connected = true;
-    //                     in_ap_mode = false;
-    //                     printf("[NET] Reconnected to Wi-Fi, IP=%s\n", ipbuf);
-    //                     sta_http_start();
-    //                 } else {
-    //                     printf("[NET] STA associated but no DHCP yet; reverting to AP.\n");
-    //                     start_ap_mode();
-    //                 }
-    //             } else {
-    //                 printf("[NET] STA reconnect failed — reverting to AP mode.\n");
-    //                 start_ap_mode();  // go back to provisioning
-    //             }
-    //         } else {
-    //             printf("[NET] No valid credentials found. Staying in AP mode.\n");
-    //         }
-    //     }
-    // }
 
 }
 
@@ -278,6 +222,16 @@ bool net_is_connected() {
 }
 
 // ------------------- MQTT -------------------
+
+static void mqtt_reset_client() {
+    mqtt_state = MQTT_DISCONNECTED;
+
+    if (mqtt_client_handle) {
+        mqtt_client_free(mqtt_client_handle);
+        mqtt_client_handle = nullptr;
+    }
+
+}
 
 static void mqtt_incoming_publish_cb(
     void *arg,
@@ -320,7 +274,7 @@ static void mqtt_incoming_data_cb(
 static void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection_status_t status){
     if (status == MQTT_CONNECT_ACCEPTED){
         printf("[MQTT] Connected!\n");
-        mqtt_inflight = false; 
+        // mqtt_inflight = false; 
         mqtt_state = MQTT_CONNECTED;
 
         mqtt_set_inpub_callback(
@@ -332,18 +286,18 @@ static void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection
 
     } else {
         printf("[MQTT] Connection failed, status=%d!\n", status);
-        mqtt_state = MQTT_DISCONNECTED;
-        mqtt_client_handle = nullptr;
-        mqtt_inflight = false; 
+        mqtt_reset_client();
+        // mqtt_inflight = false; 
     }
 }
 
 static void mqtt_pub_cb(void *arg, err_t result) {
-    mqtt_inflight = false; 
+    // mqtt_inflight = false; 
     if (result == ERR_OK) {
         // printf("[MQTT] Publish confirmed\n");
     } else {
         printf("[MQTT] Publish failed with err=%d\n", result);
+        // mqtt_reset_client();
     }
 }
 
@@ -404,9 +358,7 @@ bool mqtt_connect(){
                               mqtt_connection_cb, NULL, &ci);
     if (err != ERR_OK){
         printf("[MQTT] Connect failed err=%d\n", err);
-        mqtt_client_free(mqtt_client_handle);
-        mqtt_client_handle = nullptr;
-        mqtt_state = MQTT_DISCONNECTED;
+        mqtt_reset_client();
         return false;
     }
 
@@ -427,23 +379,11 @@ void mqtt_try_connect() {
 }
 
 bool mqtt_is_connected() {
-    return (mqtt_state == MQTT_CONNECTED);
+    // return (mqtt_state == MQTT_CONNECTED);
+    return mqtt_state == MQTT_CONNECTED &&
+           mqtt_client_handle &&
+           mqtt_client_is_connected(mqtt_client_handle);
 }
-
-// bool publish_mqtt(const char* topic, const char* payload, size_t len) {
-//     if (!mqtt_is_connected()) return false;
-//     if (mqtt_inflight) return false;
-    
-//     err_t err = mqtt_publish(mqtt_client_handle, topic, payload, len, 0, 0, mqtt_pub_cb, NULL);
-//     if (err != ERR_OK) {
-//         printf("[MQTT] publish failed, err=%d\n", err);
-//         return false;
-//     }
-
-//     mqtt_inflight = true;
-//     return true;
-// }
-
 
 
 bool subscribe_mqtt(const char* topic, mqtt_message_callback_t cb) {
@@ -475,7 +415,7 @@ bool subscribe_mqtt(const char* topic, mqtt_message_callback_t cb) {
 
 bool publish_mqtt(const char* topic, const char* payload, size_t len) {
     if (!mqtt_is_connected()) return false;
-    if (mqtt_inflight) return false;
+    // if (mqtt_inflight) return false;
 
     err_t err = mqtt_publish(mqtt_client_handle, topic, payload, len, 0, 0, mqtt_pub_cb, NULL);
     if (err == ERR_MEM) {
@@ -485,10 +425,14 @@ bool publish_mqtt(const char* topic, const char* payload, size_t len) {
     }
     if (err != ERR_OK) {
         printf("[MQTT] publish failed, err=%d\n", err);
+        
+        // mqtt_inflight = false;
+        mqtt_reset_client();
         return false;
+        
     }
 
-    mqtt_inflight = true;
+    // mqtt_inflight = true;
     return true;
 }
 
